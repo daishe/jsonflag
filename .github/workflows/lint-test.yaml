@@ -1,0 +1,77 @@
+name: "Lint & test"
+
+on:
+  push:
+    branches:
+    - main
+    - master
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  go_version: "^1.24.4"
+
+jobs:
+  test:
+    name: "Test"
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v5
+    - name: "Setup Go"
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.go_version }}
+    - name: "Test project"
+      run: make test
+
+  lint:
+    name: "Lint"
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v5
+    - name: "Setup Go"
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.go_version }}
+    - name: "Lint Go code (with make target)"
+      run: make lint
+    - name: "Lint Go code (with dedicated action)"
+      uses: golangci/golangci-lint-action@v8
+      with:
+        verify: true
+        version: latest
+
+  check_go_mod_tidy:
+    name: "Check `go mod tidy`"
+    runs-on: "ubuntu-latest"
+    steps:
+    - name: "Checkout"
+      uses: actions/checkout@v5
+    - name: "Setup Go"
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.go_version }}
+    - name: "Check if `go mod tidy` has been run properly (root directory)"
+      run: |
+        go mod tidy
+        if ! (git update-index --refresh > /dev/null && git diff-index --quiet HEAD --); then
+          echo 'ERROR: go.mod file is outdated.' >&2
+          echo 'Please update go.mod file by running' >&2
+          echo '    go mod tidy' >&2
+          echo 'in the root of the repository before committing changes.' >&2
+        fi
+    - name: "Check if `go mod tidy` has been run properly (tools directory)"
+      run: |
+        (cd tools && go mod tidy)
+        if ! (git update-index --refresh > /dev/null && git diff-index --quiet HEAD --); then
+          echo 'ERROR: tools/go.mod file is outdated.' >&2
+          echo 'Please update tools/go.mod file by running' >&2
+          echo '    (cd tools && go mod tidy)' >&2
+          echo 'in the root of the repository before committing changes.' >&2
+        fi

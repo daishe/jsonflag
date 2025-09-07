@@ -1,0 +1,948 @@
+package jsonflag
+
+import (
+	"encoding/json"
+	"reflect"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+// Flag implements a single flag for a certain key or object.
+type Flag interface {
+	Path() []reflect.StructField
+	Type() string
+	Get() any
+	String() string
+	Set(string) error
+}
+
+// New returns new flag for the provided value. It returns nil it the value cannot be used as flag value.
+func New(def any) Flag {
+	if def == nil {
+		return nil
+	}
+	base := reflect.ValueOf(def)
+	if !base.CanSet() && (base.Kind() != reflect.Pointer || base.IsNil()) {
+		return nil
+	}
+	return newFlag(base, nil, nil)
+}
+
+// FilterFunc is a function that can decide if a flag should be included in recursive results as well as if flags finding should descend into the sub-flags.
+type FilterFunc func(Flag) FilterResult
+
+// FilterResult is a bit field holding filtering decision.
+type FilterResult uint32
+
+const (
+	IncludeAndDescend FilterResult = 0b00 // indicates that the given flag should be included and flags finding should descend into sub-flags
+	IncludeNoDescend  FilterResult = 0b01 // indicates that the given flag should be included, but flags finding should NOT descend into sub-flags
+	SkipAndDescend    FilterResult = 0b10 // indicates that the given flag should be skipped, but flags finding should descend into sub-flags
+	SkipNoDescend     FilterResult = 0b11 // indicates that the given flag should be skipped and flags finding should NOT descend into sub-flags
+	noDescendMask     FilterResult = 0b01
+	skipMask          FilterResult = 0b10
+)
+
+// Filter applies all filter function to the provided flag and returns filtering decision.
+func Filter(f Flag, filters ...FilterFunc) (r FilterResult) {
+	if f == nil {
+		return SkipNoDescend
+	}
+	for _, cond := range filters {
+		r |= cond(f)
+	}
+	return r
+}
+
+// Recursive returns set of flags for the provided value and all values within, recursively, according to the provided filters. Function silently skips all the values that cannot be used as flag values.
+func Recursive(def any, filters ...FilterFunc) []Flag {
+	if def == nil {
+		return nil
+	}
+	base := reflect.ValueOf(def)
+	if !base.CanSet() && (base.Kind() != reflect.Pointer || base.IsNil()) {
+		return nil
+	}
+	return recursive(base, nil, nil, filters)
+}
+
+func recursive(base reflect.Value, fieldsIndexes []int, fields []reflect.StructField, filters []FilterFunc) []Flag {
+	flags := []Flag(nil)
+	flag := newFlag(base, slices.Clone(fieldsIndexes), slices.Clone(fields))
+	filterResult := Filter(flag, filters...)
+	if filterResult&skipMask == 0 {
+		flags = append(flags, flag)
+	}
+	if filterResult&noDescendMask != 0 {
+		return flags
+	}
+
+	t := base.Type()
+	if len(fields) > 0 {
+		t = fields[len(fields)-1].Type
+	}
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return flags
+	}
+	for i := range t.NumField() {
+		field := t.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		flags = append(flags, recursive(base, append(fieldsIndexes, i), append(fields, field), filters)...)
+	}
+	return flags
+}
+
+func newFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) Flag {
+	t := defaultBase.Type()
+	if len(fields) > 0 {
+		t = fields[len(fields)-1].Type
+	}
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() { //nolint:exhaustive // cases for only supported types
+	case reflect.Bool:
+		return newBoolFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Int:
+		return newIntFlag(0, defaultBase, fieldsIndexes, fields)
+	case reflect.Int8:
+		return newIntFlag(8, defaultBase, fieldsIndexes, fields)
+	case reflect.Int16:
+		return newIntFlag(16, defaultBase, fieldsIndexes, fields)
+	case reflect.Int32:
+		return newIntFlag(32, defaultBase, fieldsIndexes, fields)
+	case reflect.Int64:
+		return newIntFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint:
+		return newUintFlag(0, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint8:
+		return newUintFlag(8, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint16:
+		return newUintFlag(16, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint32:
+		return newUintFlag(32, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint64:
+		return newUintFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Float32:
+		return newFloatFlag(32, defaultBase, fieldsIndexes, fields)
+	case reflect.Float64:
+		return newFloatFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Complex64:
+		return newComplexFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Complex128:
+		return newComplexFlag(128, defaultBase, fieldsIndexes, fields)
+	case reflect.String:
+		return newStringFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Slice:
+		return newSliceFlag(t, defaultBase, fieldsIndexes, fields)
+	case reflect.Map:
+		return newMapFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Struct:
+		return newStructFlag(defaultBase, fieldsIndexes, fields)
+	}
+	return nil
+}
+
+func newSliceFlag(typ reflect.Type, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) Flag {
+	t := typ.Elem()
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	switch t.Kind() { //nolint:exhaustive // cases for only supported types
+	case reflect.Bool:
+		return newBoolSliceFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Int:
+		return newIntSliceFlag(0, defaultBase, fieldsIndexes, fields)
+	case reflect.Int8:
+		return newIntSliceFlag(8, defaultBase, fieldsIndexes, fields)
+	case reflect.Int16:
+		return newIntSliceFlag(16, defaultBase, fieldsIndexes, fields)
+	case reflect.Int32:
+		return newIntSliceFlag(32, defaultBase, fieldsIndexes, fields)
+	case reflect.Int64:
+		return newIntSliceFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint:
+		return newUintSliceFlag(0, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint8:
+		return newUintSliceFlag(8, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint16:
+		return newUintSliceFlag(16, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint32:
+		return newUintSliceFlag(32, defaultBase, fieldsIndexes, fields)
+	case reflect.Uint64:
+		return newUintSliceFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Float32:
+		return newFloatSliceFlag(32, defaultBase, fieldsIndexes, fields)
+	case reflect.Float64:
+		return newFloatSliceFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Complex64:
+		return newComplexSliceFlag(64, defaultBase, fieldsIndexes, fields)
+	case reflect.Complex128:
+		return newComplexSliceFlag(128, defaultBase, fieldsIndexes, fields)
+	case reflect.String:
+		return newStringSliceFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Slice:
+		return newSliceSliceFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Map:
+		return newMapSliceFlag(defaultBase, fieldsIndexes, fields)
+	case reflect.Struct:
+		return newStructSliceFlag(defaultBase, fieldsIndexes, fields)
+	}
+	return nil
+}
+
+type structField struct {
+	base          reflect.Value
+	fieldsIndexes []int
+	fields        []reflect.StructField
+}
+
+func (f *structField) Path() []reflect.StructField {
+	if !f.isInitialized() {
+		return nil
+	}
+	return f.fields
+}
+
+func (f *structField) Get() any {
+	if !f.isInitialized() {
+		return nil
+	}
+	return f.get().Interface()
+}
+
+func (f *structField) Type() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	t := elemIfPtrType(f.typ())
+	if t.Kind() == reflect.Slice {
+		if n := typeName(elemIfPtrType(t.Elem())); n != "" {
+			return n + " (JSON list)"
+		}
+	}
+	return typeName(t)
+}
+
+func (f *structField) initialize(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) {
+	f.base = defaultBase
+	f.fieldsIndexes = fieldsIndexes
+	f.fields = fields
+}
+
+func (f *structField) isInitialized() bool {
+	return f.base.IsValid()
+}
+
+func (f *structField) typ() reflect.Type {
+	if !f.isInitialized() {
+		return nil
+	}
+	if len(f.fields) == 0 {
+		return f.base.Type()
+	}
+	return f.fields[len(f.fields)-1].Type
+}
+
+func (f *structField) get() reflect.Value {
+	if !f.isInitialized() {
+		return reflect.Value{}
+	}
+	return fieldByIndex(f.base, f.fieldsIndexes)
+}
+
+func fieldByIndex(v reflect.Value, index []int) reflect.Value {
+	if len(index) == 0 {
+		if v.Kind() == reflect.Pointer && v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		return v
+	}
+	if (v.Kind() != reflect.Pointer || v.Type().Elem().Kind() != reflect.Struct) && v.Kind() != reflect.Struct {
+		panic("jsonflag: expected a struct or a pointer to struct, got " + v.Kind().String())
+	}
+	for _, x := range index {
+		if v.Kind() == reflect.Pointer {
+			if v.IsNil() {
+				v.Set(reflect.New(v.Type().Elem()))
+			}
+			v = v.Elem()
+		}
+		v = v.Field(x)
+	}
+	if v.Kind() == reflect.Pointer && v.IsNil() {
+		v.Set(reflect.New(v.Type().Elem()))
+	}
+	return v
+}
+
+// func typesMustMatch(x, y reflect.Type) {
+// 	if x != y {
+// 		panic(fmt.Sprintf("types mismatch %s != %s", x.String(), y.String()))
+// 	}
+// }
+
+func elemIfPtr(v reflect.Value) reflect.Value {
+	if v.Kind() != reflect.Pointer {
+		return v
+	}
+	if v.IsNil() {
+		return reflect.Zero(v.Type().Elem())
+	}
+	return v.Elem()
+}
+
+func elemIfPtrType(t reflect.Type) reflect.Type {
+	if t.Kind() != reflect.Pointer {
+		return t
+	}
+	return t.Elem()
+}
+
+func valueSet(dst, src reflect.Value) {
+	if dst.Kind() == reflect.Pointer && !dst.CanSet() {
+		dst = dst.Elem()
+	}
+	if dst.Kind() == reflect.Pointer && src.Kind() != reflect.Pointer {
+		src = src.Addr()
+	} else if dst.Kind() != reflect.Pointer && src.Kind() == reflect.Pointer {
+		src = src.Elem()
+	}
+	dst.Set(src)
+}
+
+func valueAppend(slc, v reflect.Value) reflect.Value {
+	if slc.Elem().Kind() == reflect.Pointer && v.Kind() != reflect.Pointer {
+		v = v.Addr()
+	} else if slc.Elem().Kind() != reflect.Pointer && v.Kind() == reflect.Pointer {
+		v = v.Elem()
+	}
+	return reflect.Append(slc, v)
+}
+
+func typeName(t reflect.Type) string {
+	switch t.Kind() { //nolint:exhaustive // cases for only supported types
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int:
+		return "int"
+	case reflect.Int8:
+		return "int8"
+	case reflect.Int16:
+		return "int16"
+	case reflect.Int32:
+		return "int32"
+	case reflect.Int64:
+		return "int64"
+	case reflect.Uint:
+		return "uint"
+	case reflect.Uint8:
+		return "uint8"
+	case reflect.Uint16:
+		return "uint16"
+	case reflect.Uint32:
+		return "uint32"
+	case reflect.Uint64:
+		return "uint64"
+	case reflect.Uintptr:
+		return "uintptr"
+	case reflect.Float32:
+		return "float32"
+	case reflect.Float64:
+		return "float64"
+	case reflect.Complex64:
+		return "complex64"
+	case reflect.Complex128:
+		return "complex128"
+	case reflect.String:
+		return "string"
+	case reflect.Slice:
+		return "JSON list"
+	case reflect.Map:
+		return "JSON object"
+	case reflect.Struct:
+		return "JSON object"
+	}
+	return ""
+}
+
+type boolFlag struct {
+	structField
+}
+
+func newBoolFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *boolFlag {
+	f := &boolFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *boolFlag) IsBoolFlag() bool {
+	return true
+}
+
+func (f *boolFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get()).Bool()
+	if !v {
+		return ""
+	}
+	return strconv.FormatBool(v)
+}
+
+func (f *boolFlag) Set(val string) error {
+	v, err := strconv.ParseBool(val)
+	if err != nil {
+		return err
+	}
+	valueSet(f.get(), reflect.ValueOf(v))
+	return nil
+}
+
+type intFlag struct {
+	structField
+	bitSize int
+}
+
+func newIntFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *intFlag {
+	f := &intFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *intFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get()).Int()
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatInt(v, 10)
+}
+
+func (f *intFlag) Set(val string) error {
+	v, err := strconv.ParseInt(val, 0, f.bitSize)
+	if err != nil {
+		return err
+	}
+	valueSet(f.get(), reflect.ValueOf(v))
+	return nil
+}
+
+type uintFlag struct {
+	structField
+	bitSize int
+}
+
+func newUintFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *uintFlag {
+	f := &uintFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *uintFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get()).Uint()
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatUint(v, 10)
+}
+
+func (f *uintFlag) Set(val string) error {
+	v, err := strconv.ParseUint(val, 0, f.bitSize)
+	if err != nil {
+		return err
+	}
+	valueSet(f.get(), reflect.ValueOf(v))
+	return nil
+}
+
+type floatFlag struct {
+	structField
+	bitSize int
+}
+
+func newFloatFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *floatFlag {
+	f := &floatFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *floatFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get()).Float()
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatFloat(v, 'g', -1, f.bitSize)
+}
+
+func (f *floatFlag) Set(val string) error {
+	v, err := strconv.ParseFloat(val, f.bitSize)
+	if err != nil {
+		return err
+	}
+	valueSet(f.get(), reflect.ValueOf(v))
+	return nil
+}
+
+type complexFlag struct {
+	structField
+	bitSize int
+}
+
+func newComplexFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *complexFlag {
+	f := &complexFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *complexFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get()).Complex()
+	if v == 0 {
+		return ""
+	}
+	return strconv.FormatComplex(v, 'g', -1, f.bitSize)
+}
+
+func (f *complexFlag) Set(val string) error {
+	v, err := strconv.ParseComplex(val, f.bitSize)
+	if err != nil {
+		return err
+	}
+	valueSet(f.get(), reflect.ValueOf(v))
+	return nil
+}
+
+type stringFlag struct {
+	structField
+}
+
+func newStringFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *stringFlag {
+	f := &stringFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *stringFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	return elemIfPtr(f.get()).String()
+}
+
+func (f *stringFlag) Set(val string) error {
+	valueSet(f.get(), reflect.ValueOf(val))
+	return nil
+}
+
+type mapFlag struct {
+	structField
+}
+
+func newMapFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *mapFlag {
+	f := &mapFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *mapFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *mapFlag) Set(val string) error {
+	t := elemIfPtrType(f.typ())
+	v := reflect.MakeMap(t).Addr()
+	if err := json.Unmarshal([]byte(val), v.Interface()); err != nil {
+		return err
+	}
+	valueSet(f.get(), v)
+	return nil
+}
+
+type structFlag struct {
+	structField
+}
+
+func newStructFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *structFlag {
+	f := &structFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *structFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	b, err := json.Marshal(f.get().Interface())
+	if err != nil {
+		return ""
+	}
+	str := string(b)
+	if str == "{}" {
+		return ""
+	}
+	return str
+}
+
+func (f *structFlag) Set(val string) error {
+	t := elemIfPtrType(f.typ())
+	v := reflect.New(t)
+	if err := json.Unmarshal([]byte(val), v.Interface()); err != nil {
+		return err
+	}
+	valueSet(f.get(), v)
+	return nil
+}
+
+type boolSliceFlag struct {
+	structField
+}
+
+func newBoolSliceFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *boolSliceFlag {
+	f := &boolSliceFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *boolSliceFlag) IsBoolFlag() bool {
+	return true
+}
+
+func (f *boolSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *boolSliceFlag) Set(val string) error {
+	v, err := strconv.ParseBool(val)
+	if err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), reflect.ValueOf(v)))
+	return nil
+}
+
+type intSliceFlag struct {
+	structField
+	bitSize int
+}
+
+func newIntSliceFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *intSliceFlag {
+	f := &intSliceFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *intSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *intSliceFlag) Set(val string) error {
+	v, err := strconv.ParseInt(val, 0, f.bitSize)
+	if err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), reflect.ValueOf(v)))
+	return nil
+}
+
+type uintSliceFlag struct {
+	structField
+	bitSize int
+}
+
+func newUintSliceFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *uintSliceFlag {
+	f := &uintSliceFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *uintSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *uintSliceFlag) Set(val string) error {
+	v, err := strconv.ParseUint(val, 0, f.bitSize)
+	if err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), reflect.ValueOf(v)))
+	return nil
+}
+
+type floatSliceFlag struct {
+	structField
+	bitSize int
+}
+
+func newFloatSliceFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *floatSliceFlag {
+	f := &floatSliceFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *floatSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *floatSliceFlag) Set(val string) error {
+	v, err := strconv.ParseFloat(val, f.bitSize)
+	if err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), reflect.ValueOf(v)))
+	return nil
+}
+
+type complexSliceFlag struct {
+	structField
+	bitSize int
+}
+
+func newComplexSliceFlag(bitSize int, defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *complexSliceFlag {
+	f := &complexSliceFlag{bitSize: bitSize}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *complexSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	li := make([]string, 0, v.Len())
+	for _, x := range v.Seq2() {
+		li = append(li, `"`+strconv.FormatComplex(elemIfPtr(x).Complex(), 'g', -1, f.bitSize)+`"`)
+	}
+	return "[" + strings.Join(li, ",") + "]"
+}
+
+func (f *complexSliceFlag) Set(val string) error {
+	v, err := strconv.ParseComplex(val, f.bitSize)
+	if err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), reflect.ValueOf(v)))
+	return nil
+}
+
+type stringSliceFlag struct {
+	structField
+}
+
+func newStringSliceFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *stringSliceFlag {
+	f := &stringSliceFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *stringSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *stringSliceFlag) Set(val string) error {
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), reflect.ValueOf(val)))
+	return nil
+}
+
+type sliceSliceFlag struct {
+	structField
+}
+
+func newSliceSliceFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *sliceSliceFlag {
+	f := &sliceSliceFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *sliceSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *sliceSliceFlag) Set(val string) error {
+	sliceType := elemIfPtrType(f.typ())
+	t := elemIfPtrType(sliceType.Elem()) // slice element type
+	v := reflect.MakeSlice(t, 0, 0).Addr()
+	if err := json.Unmarshal([]byte(val), v.Interface()); err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), v))
+	return nil
+}
+
+type mapSliceFlag struct {
+	structField
+}
+
+func newMapSliceFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *mapSliceFlag {
+	f := &mapSliceFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *mapSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *mapSliceFlag) Set(val string) error {
+	sliceType := elemIfPtrType(f.typ())
+	t := elemIfPtrType(sliceType.Elem()) // slice element type
+	v := reflect.MakeMap(t).Addr()
+	if err := json.Unmarshal([]byte(val), v.Interface()); err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), v))
+	return nil
+}
+
+type structSliceFlag struct {
+	structField
+}
+
+func newStructSliceFlag(defaultBase reflect.Value, fieldsIndexes []int, fields []reflect.StructField) *structSliceFlag {
+	f := &structSliceFlag{}
+	f.initialize(defaultBase, fieldsIndexes, fields)
+	return f
+}
+
+func (f *structSliceFlag) String() string {
+	if !f.isInitialized() {
+		return ""
+	}
+	v := elemIfPtr(f.get())
+	if v.Len() == 0 {
+		return ""
+	}
+	b, err := json.Marshal(v.Interface())
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (f *structSliceFlag) Set(val string) error {
+	sliceType := elemIfPtrType(f.typ())
+	t := elemIfPtrType(sliceType.Elem()) // slice element type
+	v := reflect.New(t)
+	if err := json.Unmarshal([]byte(val), v.Interface()); err != nil {
+		return err
+	}
+	x := f.get()
+	valueSet(x, valueAppend(elemIfPtr(x), v))
+	return nil
+}

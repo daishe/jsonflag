@@ -1,0 +1,189 @@
+package jsonflag
+
+import (
+	"flag"
+	"reflect"
+	"strings"
+
+	"github.com/spf13/pflag"
+)
+
+func AsPFlag(ops *Operations, f Flag) *pflag.Flag {
+	v := &value{ops: ops, f: f}
+	pf := &pflag.Flag{
+		Name:     flagName(f),
+		Usage:    flagUsage(f),
+		Value:    v,
+		DefValue: f.Default(),
+	}
+	if v.IsBoolFlag() {
+		pf.NoOptDefVal = "true"
+	}
+	return pf
+}
+
+func AsGoFlag(ops *Operations, f Flag) (flag.Value, string, string) {
+	return &value{ops: ops, f: f}, flagName(f), flagUsage(f)
+}
+
+func flagName(f Flag) string {
+	b := strings.Builder{}
+	for i, p := range f.Path() {
+		if i != 0 {
+			b.WriteByte('.')
+		}
+		b.WriteString(p.Name)
+	}
+	n := b.String()
+	if n == "" {
+		return "input"
+	}
+	return n
+}
+
+func flagUsage(f Flag) string {
+	fields := f.Path()
+	if len(fields) == 0 {
+		return ""
+	}
+	if v := fields[len(fields)-1].Tag.Get("usage"); v != "" {
+		return v
+	}
+	if v := fields[len(fields)-1].Tag.Get("description"); v != "" {
+		return v
+	}
+	if v := fields[len(fields)-1].Tag.Get("desc"); v != "" {
+		return v
+	}
+	return ""
+}
+
+func AsPValue(ops *Operations, f Flag) pflag.Value {
+	return &value{ops: ops, f: f}
+}
+
+func AsGoValue(ops *Operations, f Flag) flag.Value {
+	return &value{ops: ops, f: f}
+}
+
+type value struct {
+	ops *Operations
+	f   Flag
+}
+
+func (v *value) IsBoolFlag() bool {
+	t := elemIfPtrType(v.f.Type())
+	return t.Kind() == reflect.Bool || (t.Kind() == reflect.Slice && elemIfPtrType(t.Elem()).Kind() == reflect.Bool)
+}
+
+func (v *value) String() string {
+	return v.f.Default()
+}
+
+func (v *value) Type() string {
+	t := elemIfPtrType(v.f.Type())
+	switch t.Kind() {
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int:
+		return "int"
+	case reflect.Int8:
+		return "int8"
+	case reflect.Int16:
+		return "int16"
+	case reflect.Int32:
+		return "int32"
+	case reflect.Int64:
+		return "int64"
+	case reflect.Uint:
+		return "uint"
+	case reflect.Uint8:
+		return "uint8"
+	case reflect.Uint16:
+		return "uint16"
+	case reflect.Uint32:
+		return "uint32"
+	case reflect.Uint64:
+		return "uint64"
+	case reflect.Uintptr:
+		return "uintptr"
+	case reflect.Float32:
+		return "float32"
+	case reflect.Float64:
+		return "float64"
+	case reflect.Complex64:
+		return "complex64"
+	case reflect.Complex128:
+		return "complex128"
+	case reflect.String:
+		return "string"
+	case reflect.Slice:
+	case reflect.Map:
+		return "JSON object"
+	case reflect.Struct:
+		return "JSON object"
+	}
+
+	return v.f.Default()
+}
+
+func (v *value) Set(to string) error {
+	o, err := v.f.Apply(*v.ops, to)
+	if err != nil {
+		return err
+	}
+	(*v.ops) = o
+	return nil
+}
+
+func (v *value) Get() any {
+	return nil
+}
+
+func typeName(t reflect.Type) string {
+	switch t.Kind() {
+	case reflect.Bool:
+		return "bool"
+	case reflect.Int:
+		return "int"
+	case reflect.Int8:
+		return "int8"
+	case reflect.Int16:
+		return "int16"
+	case reflect.Int32:
+		return "int32"
+	case reflect.Int64:
+		return "int64"
+	case reflect.Uint:
+		return "uint"
+	case reflect.Uint8:
+		return "uint8"
+	case reflect.Uint16:
+		return "uint16"
+	case reflect.Uint32:
+		return "uint32"
+	case reflect.Uint64:
+		return "uint64"
+	case reflect.Uintptr:
+		return "uintptr"
+	case reflect.Float32:
+		return "float32"
+	case reflect.Float64:
+		return "float64"
+	case reflect.Complex64:
+		return "complex64"
+	case reflect.Complex128:
+		return "complex128"
+	case reflect.String:
+		return "string"
+	case reflect.Slice:
+		if n := typeName(elemIfPtrType(t.Elem())); n != "" {
+			return n + " (JSON array)"
+		}
+	case reflect.Map:
+		return "JSON object"
+	case reflect.Struct:
+		return "JSON object"
+	}
+	return ""
+}

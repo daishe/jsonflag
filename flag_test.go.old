@@ -1,0 +1,511 @@
+package jsonflag_test
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/daishe/jsonflag"
+)
+
+type FlagData struct {
+	PathNames []string
+	Type      string
+	Get       any
+	String    string
+}
+
+func DataOfFlag(flag jsonflag.Flag) *FlagData {
+	pathNames := []string{}
+	for _, x := range flag.Path() {
+		pathNames = append(pathNames, x.Name)
+	}
+	return &FlagData{
+		PathNames: pathNames,
+		Type:      flag.Type(),
+		Get:       flag.Get(),
+		String:    flag.String(),
+	}
+}
+
+func DataOfFlags(flags []jsonflag.Flag) (d []*FlagData) {
+	for _, f := range flags {
+		d = append(d, DataOfFlag(f))
+	}
+	return d
+}
+
+func Type[T any]() reflect.Type {
+	var v *T
+	return reflect.TypeOf(v).Elem()
+}
+
+func Ptr[T any](v T) *T {
+	return &v
+}
+
+type TestFlagBase struct {
+	unexportedValue int
+	unexportedPtr   *int
+	Bool            *TestGenericType[bool]              `json:"Bool,omitempty"`
+	Int             *TestGenericType[int]               `json:"Int,omitempty"`
+	Int8            *TestGenericType[int8]              `json:"Int8,omitempty"`
+	Int16           *TestGenericType[int16]             `json:"Int16,omitempty"`
+	Int32           *TestGenericType[int32]             `json:"Int32,omitempty"`
+	Int64           *TestGenericType[int64]             `json:"Int64,omitempty"`
+	Uint            *TestGenericType[uint]              `json:"Uint,omitempty"`
+	Uint8           *TestGenericType[uint8]             `json:"Uint8,omitempty"`
+	Uint16          *TestGenericType[uint16]            `json:"Uint16,omitempty"`
+	Uint32          *TestGenericType[uint32]            `json:"Uint32,omitempty"`
+	Uint64          *TestGenericType[uint64]            `json:"Uint64,omitempty"`
+	Float32         *TestGenericType[float32]           `json:"Float32,omitempty"`
+	Float64         *TestGenericType[float64]           `json:"Float64,omitempty"`
+	Complex64       *TestGenericType[complex64]         `json:"Complex64,omitempty"`
+	Complex128      *TestGenericType[complex128]        `json:"Complex128,omitempty"`
+	String          *TestGenericType[string]            `json:"String,omitempty"`
+	Slice           *TestGenericType[[]string]          `json:"Slice,omitempty"`
+	Map             *TestGenericType[map[string]string] `json:"Map,omitempty"`
+	Struct          *TestGenericType[TestStruct]        `json:"Struct,omitempty"`
+}
+
+type TestGenericType[T any] struct {
+	Value              T     `json:"Value,omitempty"`
+	Ptr                *T    `json:"Ptr,omitempty"`
+	SliceOfValues      []T   `json:"SliceOfValues,omitempty"`
+	PtrToSliceOfValues *[]T  `json:"PtrToSliceOfValues,omitempty"`
+	SliceOfPtrs        []*T  `json:"SliceOfPtrs,omitempty"`
+	PtrToSliceOfPtrs   *[]*T `json:"PtrToSliceOfPtrs,omitempty"`
+}
+
+type TestStruct struct {
+	Value string `json:"Value,omitempty"`
+}
+
+func TestRecursiveFlagsData(t *testing.T) {
+	tests := []struct {
+		name      string
+		given     any
+		postGiven any
+		want      []*FlagData
+	}{
+		{
+			name:      "nil",
+			given:     nil,
+			postGiven: nil,
+			want:      []*FlagData(nil),
+		},
+		{
+			name:      "string",
+			given:     "",
+			postGiven: "",
+			want:      []*FlagData(nil),
+		},
+		{
+			name:      "nil-ptr-to-string",
+			given:     (*string)(nil),
+			postGiven: (*string)(nil),
+			want:      []*FlagData(nil),
+		},
+		{
+			name:      "ptr-to-string",
+			given:     Ptr(""),
+			postGiven: Ptr(""),
+			want: []*FlagData{
+				{PathNames: []string{}, Type: "string", Get: Ptr(""), String: ``},
+			},
+		},
+		{
+			name:      "slice",
+			given:     []string{},
+			postGiven: []string{},
+			want:      []*FlagData(nil),
+		},
+		{
+			name:      "nil-ptr-to-slice",
+			given:     (*[]string)(nil),
+			postGiven: (*[]string)(nil),
+			want:      []*FlagData(nil),
+		},
+		{
+			name:      "ptr-to-slice",
+			given:     &[]string{},
+			postGiven: &[]string{},
+			want: []*FlagData{
+				{PathNames: []string{}, Type: "string (JSON list)", Get: &[]string{}, String: ``},
+			},
+		},
+		{
+			name:      "struct",
+			given:     TestFlagBase{},
+			postGiven: TestFlagBase{},
+			want:      []*FlagData(nil),
+		},
+		{
+			name:      "nil-ptr-to-struct",
+			given:     (*TestFlagBase)(nil),
+			postGiven: (*TestFlagBase)(nil),
+			want:      []*FlagData(nil),
+		},
+		{
+			name:  "ptr-to-struct",
+			given: &TestFlagBase{},
+			postGiven: &TestFlagBase{
+				unexportedValue: 0,
+				unexportedPtr:   nil,
+				Bool:            &TestGenericType[bool]{Ptr: Ptr(false), PtrToSliceOfValues: Ptr([]bool(nil)), PtrToSliceOfPtrs: Ptr([]*bool(nil))},
+				Int:             &TestGenericType[int]{Ptr: Ptr(int(0)), PtrToSliceOfValues: Ptr([]int(nil)), PtrToSliceOfPtrs: Ptr([]*int(nil))},
+				Int8:            &TestGenericType[int8]{Ptr: Ptr(int8(0)), PtrToSliceOfValues: Ptr([]int8(nil)), PtrToSliceOfPtrs: Ptr([]*int8(nil))},
+				Int16:           &TestGenericType[int16]{Ptr: Ptr(int16(0)), PtrToSliceOfValues: Ptr([]int16(nil)), PtrToSliceOfPtrs: Ptr([]*int16(nil))},
+				Int32:           &TestGenericType[int32]{Ptr: Ptr(int32(0)), PtrToSliceOfValues: Ptr([]int32(nil)), PtrToSliceOfPtrs: Ptr([]*int32(nil))},
+				Int64:           &TestGenericType[int64]{Ptr: Ptr(int64(0)), PtrToSliceOfValues: Ptr([]int64(nil)), PtrToSliceOfPtrs: Ptr([]*int64(nil))},
+				Uint:            &TestGenericType[uint]{Ptr: Ptr(uint(0)), PtrToSliceOfValues: Ptr([]uint(nil)), PtrToSliceOfPtrs: Ptr([]*uint(nil))},
+				Uint8:           &TestGenericType[uint8]{Ptr: Ptr(uint8(0)), PtrToSliceOfValues: Ptr([]uint8(nil)), PtrToSliceOfPtrs: Ptr([]*uint8(nil))},
+				Uint16:          &TestGenericType[uint16]{Ptr: Ptr(uint16(0)), PtrToSliceOfValues: Ptr([]uint16(nil)), PtrToSliceOfPtrs: Ptr([]*uint16(nil))},
+				Uint32:          &TestGenericType[uint32]{Ptr: Ptr(uint32(0)), PtrToSliceOfValues: Ptr([]uint32(nil)), PtrToSliceOfPtrs: Ptr([]*uint32(nil))},
+				Uint64:          &TestGenericType[uint64]{Ptr: Ptr(uint64(0)), PtrToSliceOfValues: Ptr([]uint64(nil)), PtrToSliceOfPtrs: Ptr([]*uint64(nil))},
+				Float32:         &TestGenericType[float32]{Ptr: Ptr(float32(0)), PtrToSliceOfValues: Ptr([]float32(nil)), PtrToSliceOfPtrs: Ptr([]*float32(nil))},
+				Float64:         &TestGenericType[float64]{Ptr: Ptr(float64(0)), PtrToSliceOfValues: Ptr([]float64(nil)), PtrToSliceOfPtrs: Ptr([]*float64(nil))},
+				Complex64:       &TestGenericType[complex64]{Ptr: Ptr(complex64(0)), PtrToSliceOfValues: Ptr([]complex64(nil)), PtrToSliceOfPtrs: Ptr([]*complex64(nil))},
+				Complex128:      &TestGenericType[complex128]{Ptr: Ptr(complex128(0)), PtrToSliceOfValues: Ptr([]complex128(nil)), PtrToSliceOfPtrs: Ptr([]*complex128(nil))},
+				String:          &TestGenericType[string]{Ptr: Ptr(""), PtrToSliceOfValues: Ptr([]string(nil)), PtrToSliceOfPtrs: Ptr([]*string(nil))},
+				Slice:           &TestGenericType[[]string]{Ptr: Ptr([]string(nil)), PtrToSliceOfValues: Ptr([][]string(nil)), PtrToSliceOfPtrs: Ptr([]*[]string(nil))},
+				Map:             &TestGenericType[map[string]string]{Ptr: Ptr(map[string]string(nil)), PtrToSliceOfValues: Ptr([]map[string]string(nil)), PtrToSliceOfPtrs: Ptr([]*map[string]string(nil))},
+				Struct:          &TestGenericType[TestStruct]{Ptr: &TestStruct{}, PtrToSliceOfValues: Ptr([]TestStruct(nil)), PtrToSliceOfPtrs: Ptr([]*TestStruct(nil))},
+			},
+			want: []*FlagData{
+				{PathNames: []string{}, Type: "JSON object", String: ``},
+				{PathNames: []string{"Bool"}, Type: "J", String: ``},
+				{PathNames: []string{"Bool", "Value"}, Type: Type[bool](), String: ``},
+				{PathNames: []string{"Bool", "Ptr"}, Type: Type[*bool](), String: ``},
+				{PathNames: []string{"Bool", "SliceOfValues"}, Type: Type[[]bool](), String: ``},
+				{PathNames: []string{"Bool", "PtrToSliceOfValues"}, Type: Type[*[]bool](), String: ``},
+				{PathNames: []string{"Bool", "SliceOfPtrs"}, Type: Type[[]*bool](), String: ``},
+				{PathNames: []string{"Bool", "PtrToSliceOfPtrs"}, Type: Type[*[]*bool](), String: ``},
+				{PathNames: []string{"Int"}, Type: Type[*TestGenericType[int]](), String: ``},
+				{PathNames: []string{"Int", "Value"}, Type: Type[int](), String: ``},
+				{PathNames: []string{"Int", "Ptr"}, Type: Type[*int](), String: ``},
+				{PathNames: []string{"Int", "SliceOfValues"}, Type: Type[[]int](), String: ``},
+				{PathNames: []string{"Int", "PtrToSliceOfValues"}, Type: Type[*[]int](), String: ``},
+				{PathNames: []string{"Int", "SliceOfPtrs"}, Type: Type[[]*int](), String: ``},
+				{PathNames: []string{"Int", "PtrToSliceOfPtrs"}, Type: Type[*[]*int](), String: ``},
+				{PathNames: []string{"Int8"}, Type: Type[*TestGenericType[int8]](), String: ``},
+				{PathNames: []string{"Int8", "Value"}, Type: Type[int8](), String: ``},
+				{PathNames: []string{"Int8", "Ptr"}, Type: Type[*int8](), String: ``},
+				{PathNames: []string{"Int8", "SliceOfValues"}, Type: Type[[]int8](), String: ``},
+				{PathNames: []string{"Int8", "PtrToSliceOfValues"}, Type: Type[*[]int8](), String: ``},
+				{PathNames: []string{"Int8", "SliceOfPtrs"}, Type: Type[[]*int8](), String: ``},
+				{PathNames: []string{"Int8", "PtrToSliceOfPtrs"}, Type: Type[*[]*int8](), String: ``},
+				{PathNames: []string{"Int16"}, Type: Type[*TestGenericType[int16]](), String: ``},
+				{PathNames: []string{"Int16", "Value"}, Type: Type[int16](), String: ``},
+				{PathNames: []string{"Int16", "Ptr"}, Type: Type[*int16](), String: ``},
+				{PathNames: []string{"Int16", "SliceOfValues"}, Type: Type[[]int16](), String: ``},
+				{PathNames: []string{"Int16", "PtrToSliceOfValues"}, Type: Type[*[]int16](), String: ``},
+				{PathNames: []string{"Int16", "SliceOfPtrs"}, Type: Type[[]*int16](), String: ``},
+				{PathNames: []string{"Int16", "PtrToSliceOfPtrs"}, Type: Type[*[]*int16](), String: ``},
+				{PathNames: []string{"Int32"}, Type: Type[*TestGenericType[int32]](), String: ``},
+				{PathNames: []string{"Int32", "Value"}, Type: Type[int32](), String: ``},
+				{PathNames: []string{"Int32", "Ptr"}, Type: Type[*int32](), String: ``},
+				{PathNames: []string{"Int32", "SliceOfValues"}, Type: Type[[]int32](), String: ``},
+				{PathNames: []string{"Int32", "PtrToSliceOfValues"}, Type: Type[*[]int32](), String: ``},
+				{PathNames: []string{"Int32", "SliceOfPtrs"}, Type: Type[[]*int32](), String: ``},
+				{PathNames: []string{"Int32", "PtrToSliceOfPtrs"}, Type: Type[*[]*int32](), String: ``},
+				{PathNames: []string{"Int64"}, Type: Type[*TestGenericType[int64]](), String: ``},
+				{PathNames: []string{"Int64", "Value"}, Type: Type[int64](), String: ``},
+				{PathNames: []string{"Int64", "Ptr"}, Type: Type[*int64](), String: ``},
+				{PathNames: []string{"Int64", "SliceOfValues"}, Type: Type[[]int64](), String: ``},
+				{PathNames: []string{"Int64", "PtrToSliceOfValues"}, Type: Type[*[]int64](), String: ``},
+				{PathNames: []string{"Int64", "SliceOfPtrs"}, Type: Type[[]*int64](), String: ``},
+				{PathNames: []string{"Int64", "PtrToSliceOfPtrs"}, Type: Type[*[]*int64](), String: ``},
+				{PathNames: []string{"Uint"}, Type: Type[*TestGenericType[uint]](), String: ``},
+				{PathNames: []string{"Uint", "Value"}, Type: Type[uint](), String: ``},
+				{PathNames: []string{"Uint", "Ptr"}, Type: Type[*uint](), String: ``},
+				{PathNames: []string{"Uint", "SliceOfValues"}, Type: Type[[]uint](), String: ``},
+				{PathNames: []string{"Uint", "PtrToSliceOfValues"}, Type: Type[*[]uint](), String: ``},
+				{PathNames: []string{"Uint", "SliceOfPtrs"}, Type: Type[[]*uint](), String: ``},
+				{PathNames: []string{"Uint", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint](), String: ``},
+				{PathNames: []string{"Uint8"}, Type: Type[*TestGenericType[uint8]](), String: ``},
+				{PathNames: []string{"Uint8", "Value"}, Type: Type[uint8](), String: ``},
+				{PathNames: []string{"Uint8", "Ptr"}, Type: Type[*uint8](), String: ``},
+				{PathNames: []string{"Uint8", "SliceOfValues"}, Type: Type[[]uint8](), String: ``},
+				{PathNames: []string{"Uint8", "PtrToSliceOfValues"}, Type: Type[*[]uint8](), String: ``},
+				{PathNames: []string{"Uint8", "SliceOfPtrs"}, Type: Type[[]*uint8](), String: ``},
+				{PathNames: []string{"Uint8", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint8](), String: ``},
+				{PathNames: []string{"Uint16"}, Type: Type[*TestGenericType[uint16]](), String: ``},
+				{PathNames: []string{"Uint16", "Value"}, Type: Type[uint16](), String: ``},
+				{PathNames: []string{"Uint16", "Ptr"}, Type: Type[*uint16](), String: ``},
+				{PathNames: []string{"Uint16", "SliceOfValues"}, Type: Type[[]uint16](), String: ``},
+				{PathNames: []string{"Uint16", "PtrToSliceOfValues"}, Type: Type[*[]uint16](), String: ``},
+				{PathNames: []string{"Uint16", "SliceOfPtrs"}, Type: Type[[]*uint16](), String: ``},
+				{PathNames: []string{"Uint16", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint16](), String: ``},
+				{PathNames: []string{"Uint32"}, Type: Type[*TestGenericType[uint32]](), String: ``},
+				{PathNames: []string{"Uint32", "Value"}, Type: Type[uint32](), String: ``},
+				{PathNames: []string{"Uint32", "Ptr"}, Type: Type[*uint32](), String: ``},
+				{PathNames: []string{"Uint32", "SliceOfValues"}, Type: Type[[]uint32](), String: ``},
+				{PathNames: []string{"Uint32", "PtrToSliceOfValues"}, Type: Type[*[]uint32](), String: ``},
+				{PathNames: []string{"Uint32", "SliceOfPtrs"}, Type: Type[[]*uint32](), String: ``},
+				{PathNames: []string{"Uint32", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint32](), String: ``},
+				{PathNames: []string{"Uint64"}, Type: Type[*TestGenericType[uint64]](), String: ``},
+				{PathNames: []string{"Uint64", "Value"}, Type: Type[uint64](), String: ``},
+				{PathNames: []string{"Uint64", "Ptr"}, Type: Type[*uint64](), String: ``},
+				{PathNames: []string{"Uint64", "SliceOfValues"}, Type: Type[[]uint64](), String: ``},
+				{PathNames: []string{"Uint64", "PtrToSliceOfValues"}, Type: Type[*[]uint64](), String: ``},
+				{PathNames: []string{"Uint64", "SliceOfPtrs"}, Type: Type[[]*uint64](), String: ``},
+				{PathNames: []string{"Uint64", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint64](), String: ``},
+				{PathNames: []string{"Float32"}, Type: Type[*TestGenericType[float32]](), String: ``},
+				{PathNames: []string{"Float32", "Value"}, Type: Type[float32](), String: ``},
+				{PathNames: []string{"Float32", "Ptr"}, Type: Type[*float32](), String: ``},
+				{PathNames: []string{"Float32", "SliceOfValues"}, Type: Type[[]float32](), String: ``},
+				{PathNames: []string{"Float32", "PtrToSliceOfValues"}, Type: Type[*[]float32](), String: ``},
+				{PathNames: []string{"Float32", "SliceOfPtrs"}, Type: Type[[]*float32](), String: ``},
+				{PathNames: []string{"Float32", "PtrToSliceOfPtrs"}, Type: Type[*[]*float32](), String: ``},
+				{PathNames: []string{"Float64"}, Type: Type[*TestGenericType[float64]](), String: ``},
+				{PathNames: []string{"Float64", "Value"}, Type: Type[float64](), String: ``},
+				{PathNames: []string{"Float64", "Ptr"}, Type: Type[*float64](), String: ``},
+				{PathNames: []string{"Float64", "SliceOfValues"}, Type: Type[[]float64](), String: ``},
+				{PathNames: []string{"Float64", "PtrToSliceOfValues"}, Type: Type[*[]float64](), String: ``},
+				{PathNames: []string{"Float64", "SliceOfPtrs"}, Type: Type[[]*float64](), String: ``},
+				{PathNames: []string{"Float64", "PtrToSliceOfPtrs"}, Type: Type[*[]*float64](), String: ``},
+				{PathNames: []string{"Complex64"}, Type: Type[*TestGenericType[complex64]](), String: ``},
+				{PathNames: []string{"Complex64", "Value"}, Type: Type[complex64](), String: ``},
+				{PathNames: []string{"Complex64", "Ptr"}, Type: Type[*complex64](), String: ``},
+				{PathNames: []string{"Complex64", "SliceOfValues"}, Type: Type[[]complex64](), String: ``},
+				{PathNames: []string{"Complex64", "PtrToSliceOfValues"}, Type: Type[*[]complex64](), String: ``},
+				{PathNames: []string{"Complex64", "SliceOfPtrs"}, Type: Type[[]*complex64](), String: ``},
+				{PathNames: []string{"Complex64", "PtrToSliceOfPtrs"}, Type: Type[*[]*complex64](), String: ``},
+				{PathNames: []string{"Complex128"}, Type: Type[*TestGenericType[complex128]](), String: ``},
+				{PathNames: []string{"Complex128", "Value"}, Type: Type[complex128](), String: ``},
+				{PathNames: []string{"Complex128", "Ptr"}, Type: Type[*complex128](), String: ``},
+				{PathNames: []string{"Complex128", "SliceOfValues"}, Type: Type[[]complex128](), String: ``},
+				{PathNames: []string{"Complex128", "PtrToSliceOfValues"}, Type: Type[*[]complex128](), String: ``},
+				{PathNames: []string{"Complex128", "SliceOfPtrs"}, Type: Type[[]*complex128](), String: ``},
+				{PathNames: []string{"Complex128", "PtrToSliceOfPtrs"}, Type: Type[*[]*complex128](), String: ``},
+				{PathNames: []string{"String"}, Type: Type[*TestGenericType[string]](), String: ``},
+				{PathNames: []string{"String", "Value"}, Type: Type[string](), String: ``},
+				{PathNames: []string{"String", "Ptr"}, Type: Type[*string](), String: ``},
+				{PathNames: []string{"String", "SliceOfValues"}, Type: Type[[]string](), String: ``},
+				{PathNames: []string{"String", "PtrToSliceOfValues"}, Type: Type[*[]string](), String: ``},
+				{PathNames: []string{"String", "SliceOfPtrs"}, Type: Type[[]*string](), String: ``},
+				{PathNames: []string{"String", "PtrToSliceOfPtrs"}, Type: Type[*[]*string](), String: ``},
+				{PathNames: []string{"Slice"}, Type: Type[*TestGenericType[[]string]](), String: ``},
+				{PathNames: []string{"Slice", "Value"}, Type: Type[[]string](), String: ``},
+				{PathNames: []string{"Slice", "Ptr"}, Type: Type[*[]string](), String: ``},
+				{PathNames: []string{"Slice", "SliceOfValues"}, Type: Type[[][]string](), String: ``},
+				{PathNames: []string{"Slice", "PtrToSliceOfValues"}, Type: Type[*[][]string](), String: ``},
+				{PathNames: []string{"Slice", "SliceOfPtrs"}, Type: Type[[]*[]string](), String: ``},
+				{PathNames: []string{"Slice", "PtrToSliceOfPtrs"}, Type: Type[*[]*[]string](), String: ``},
+				{PathNames: []string{"Map"}, Type: Type[*TestGenericType[map[string]string]](), String: ``},
+				{PathNames: []string{"Map", "Value"}, Type: Type[map[string]string](), String: ``},
+				{PathNames: []string{"Map", "Ptr"}, Type: Type[*map[string]string](), String: ``},
+				{PathNames: []string{"Map", "SliceOfValues"}, Type: Type[[]map[string]string](), String: ``},
+				{PathNames: []string{"Map", "PtrToSliceOfValues"}, Type: Type[*[]map[string]string](), String: ``},
+				{PathNames: []string{"Map", "SliceOfPtrs"}, Type: Type[[]*map[string]string](), String: ``},
+				{PathNames: []string{"Map", "PtrToSliceOfPtrs"}, Type: Type[*[]*map[string]string](), String: ``},
+				{PathNames: []string{"Struct"}, Type: Type[*TestGenericType[TestStruct]](), String: `{"Value":{}}`},
+				{PathNames: []string{"Struct", "Value"}, Type: Type[TestStruct](), String: ``},
+				{PathNames: []string{"Struct", "Value", "Value"}, Type: Type[string](), String: ``},
+				{PathNames: []string{"Struct", "Ptr"}, Type: Type[*TestStruct](), String: ``},
+				{PathNames: []string{"Struct", "Ptr", "Value"}, Type: Type[string](), String: ``},
+				{PathNames: []string{"Struct", "SliceOfValues"}, Type: Type[[]TestStruct](), String: ``},
+				{PathNames: []string{"Struct", "PtrToSliceOfValues"}, Type: Type[*[]TestStruct](), String: ``},
+				{PathNames: []string{"Struct", "SliceOfPtrs"}, Type: Type[[]*TestStruct](), String: ``},
+				{PathNames: []string{"Struct", "PtrToSliceOfPtrs"}, Type: Type[*[]*TestStruct](), String: ``},
+			},
+		},
+		{
+			name: "ptr-to-struct-non-default",
+			given: &TestFlagBase{
+				unexportedValue: 1,
+				unexportedPtr:   Ptr(1),
+				Bool:            &TestGenericType[bool]{Value: true, Ptr: Ptr(true), SliceOfValues: []bool{true}, PtrToSliceOfValues: &[]bool{true}, SliceOfPtrs: []*bool{Ptr(true)}, PtrToSliceOfPtrs: &[]*bool{Ptr(true)}},
+				Int:             &TestGenericType[int]{Value: 1, Ptr: Ptr(int(1)), SliceOfValues: []int{1}, PtrToSliceOfValues: &[]int{1}, SliceOfPtrs: []*int{Ptr(int(1))}, PtrToSliceOfPtrs: &[]*int{Ptr(int(1))}},
+				Int8:            &TestGenericType[int8]{Value: 1, Ptr: Ptr(int8(1)), SliceOfValues: []int8{1}, PtrToSliceOfValues: &[]int8{1}, SliceOfPtrs: []*int8{Ptr(int8(1))}, PtrToSliceOfPtrs: &[]*int8{Ptr(int8(1))}},
+				Int16:           &TestGenericType[int16]{Value: 1, Ptr: Ptr(int16(1)), SliceOfValues: []int16{1}, PtrToSliceOfValues: &[]int16{1}, SliceOfPtrs: []*int16{Ptr(int16(1))}, PtrToSliceOfPtrs: &[]*int16{Ptr(int16(1))}},
+				Int32:           &TestGenericType[int32]{Value: 1, Ptr: Ptr(int32(1)), SliceOfValues: []int32{1}, PtrToSliceOfValues: &[]int32{1}, SliceOfPtrs: []*int32{Ptr(int32(1))}, PtrToSliceOfPtrs: &[]*int32{Ptr(int32(1))}},
+				Int64:           &TestGenericType[int64]{Value: 1, Ptr: Ptr(int64(1)), SliceOfValues: []int64{1}, PtrToSliceOfValues: &[]int64{1}, SliceOfPtrs: []*int64{Ptr(int64(1))}, PtrToSliceOfPtrs: &[]*int64{Ptr(int64(1))}},
+				Uint:            &TestGenericType[uint]{Value: 1, Ptr: Ptr(uint(1)), SliceOfValues: []uint{1}, PtrToSliceOfValues: &[]uint{1}, SliceOfPtrs: []*uint{Ptr(uint(1))}, PtrToSliceOfPtrs: &[]*uint{Ptr(uint(1))}},
+				Uint8:           &TestGenericType[uint8]{Value: 1, Ptr: Ptr(uint8(1)), SliceOfValues: []uint8{1}, PtrToSliceOfValues: &[]uint8{1}, SliceOfPtrs: []*uint8{Ptr(uint8(1))}, PtrToSliceOfPtrs: &[]*uint8{Ptr(uint8(1))}},
+				Uint16:          &TestGenericType[uint16]{Value: 1, Ptr: Ptr(uint16(1)), SliceOfValues: []uint16{1}, PtrToSliceOfValues: &[]uint16{1}, SliceOfPtrs: []*uint16{Ptr(uint16(1))}, PtrToSliceOfPtrs: &[]*uint16{Ptr(uint16(1))}},
+				Uint32:          &TestGenericType[uint32]{Value: 1, Ptr: Ptr(uint32(1)), SliceOfValues: []uint32{1}, PtrToSliceOfValues: &[]uint32{1}, SliceOfPtrs: []*uint32{Ptr(uint32(1))}, PtrToSliceOfPtrs: &[]*uint32{Ptr(uint32(1))}},
+				Uint64:          &TestGenericType[uint64]{Value: 1, Ptr: Ptr(uint64(1)), SliceOfValues: []uint64{1}, PtrToSliceOfValues: &[]uint64{1}, SliceOfPtrs: []*uint64{Ptr(uint64(1))}, PtrToSliceOfPtrs: &[]*uint64{Ptr(uint64(1))}},
+				Float32:         &TestGenericType[float32]{Value: 1, Ptr: Ptr(float32(1)), SliceOfValues: []float32{1}, PtrToSliceOfValues: &[]float32{1}, SliceOfPtrs: []*float32{Ptr(float32(1))}, PtrToSliceOfPtrs: &[]*float32{Ptr(float32(1))}},
+				Float64:         &TestGenericType[float64]{Value: 1, Ptr: Ptr(float64(1)), SliceOfValues: []float64{1}, PtrToSliceOfValues: &[]float64{1}, SliceOfPtrs: []*float64{Ptr(float64(1))}, PtrToSliceOfPtrs: &[]*float64{Ptr(float64(1))}},
+				Complex64:       &TestGenericType[complex64]{Value: 1, Ptr: Ptr(complex64(1)), SliceOfValues: []complex64{1}, PtrToSliceOfValues: &[]complex64{1}, SliceOfPtrs: []*complex64{Ptr(complex64(1))}, PtrToSliceOfPtrs: &[]*complex64{Ptr(complex64(1))}},
+				Complex128:      &TestGenericType[complex128]{Value: 1, Ptr: Ptr(complex128(1)), SliceOfValues: []complex128{1}, PtrToSliceOfValues: &[]complex128{1}, SliceOfPtrs: []*complex128{Ptr(complex128(1))}, PtrToSliceOfPtrs: &[]*complex128{Ptr(complex128(1))}},
+				String:          &TestGenericType[string]{Value: "a", Ptr: Ptr("a"), SliceOfValues: []string{"a"}, PtrToSliceOfValues: &[]string{"a"}, SliceOfPtrs: []*string{Ptr("a")}, PtrToSliceOfPtrs: &[]*string{Ptr("a")}},
+				Slice:           &TestGenericType[[]string]{Value: []string{"a"}, Ptr: &[]string{"a"}, SliceOfValues: [][]string{{"a"}}, PtrToSliceOfValues: &[][]string{{"a"}}, SliceOfPtrs: []*[]string{{"a"}}, PtrToSliceOfPtrs: &[]*[]string{{"a"}}},
+				Map:             &TestGenericType[map[string]string]{Value: map[string]string{"k": "a"}, Ptr: &map[string]string{"k": "a"}, SliceOfValues: []map[string]string{{"k": "a"}}, PtrToSliceOfValues: &[]map[string]string{{"k": "a"}}, SliceOfPtrs: []*map[string]string{{"k": "a"}}, PtrToSliceOfPtrs: &[]*map[string]string{{"k": "a"}}},
+				Struct:          &TestGenericType[TestStruct]{Value: TestStruct{Value: "a"}, Ptr: &TestStruct{Value: "a"}, SliceOfValues: []TestStruct{{Value: "a"}}, PtrToSliceOfValues: &[]TestStruct{{Value: "a"}}, SliceOfPtrs: []*TestStruct{{Value: "a"}}, PtrToSliceOfPtrs: &[]*TestStruct{{Value: "a"}}},
+			},
+			postGiven: &TestFlagBase{
+				unexportedValue: 1,
+				unexportedPtr:   Ptr(1),
+				Bool:            &TestGenericType[bool]{Value: true, Ptr: Ptr(true), SliceOfValues: []bool{true}, PtrToSliceOfValues: &[]bool{true}, SliceOfPtrs: []*bool{Ptr(true)}, PtrToSliceOfPtrs: &[]*bool{Ptr(true)}},
+				Int:             &TestGenericType[int]{Value: 1, Ptr: Ptr(int(1)), SliceOfValues: []int{1}, PtrToSliceOfValues: &[]int{1}, SliceOfPtrs: []*int{Ptr(int(1))}, PtrToSliceOfPtrs: &[]*int{Ptr(int(1))}},
+				Int8:            &TestGenericType[int8]{Value: 1, Ptr: Ptr(int8(1)), SliceOfValues: []int8{1}, PtrToSliceOfValues: &[]int8{1}, SliceOfPtrs: []*int8{Ptr(int8(1))}, PtrToSliceOfPtrs: &[]*int8{Ptr(int8(1))}},
+				Int16:           &TestGenericType[int16]{Value: 1, Ptr: Ptr(int16(1)), SliceOfValues: []int16{1}, PtrToSliceOfValues: &[]int16{1}, SliceOfPtrs: []*int16{Ptr(int16(1))}, PtrToSliceOfPtrs: &[]*int16{Ptr(int16(1))}},
+				Int32:           &TestGenericType[int32]{Value: 1, Ptr: Ptr(int32(1)), SliceOfValues: []int32{1}, PtrToSliceOfValues: &[]int32{1}, SliceOfPtrs: []*int32{Ptr(int32(1))}, PtrToSliceOfPtrs: &[]*int32{Ptr(int32(1))}},
+				Int64:           &TestGenericType[int64]{Value: 1, Ptr: Ptr(int64(1)), SliceOfValues: []int64{1}, PtrToSliceOfValues: &[]int64{1}, SliceOfPtrs: []*int64{Ptr(int64(1))}, PtrToSliceOfPtrs: &[]*int64{Ptr(int64(1))}},
+				Uint:            &TestGenericType[uint]{Value: 1, Ptr: Ptr(uint(1)), SliceOfValues: []uint{1}, PtrToSliceOfValues: &[]uint{1}, SliceOfPtrs: []*uint{Ptr(uint(1))}, PtrToSliceOfPtrs: &[]*uint{Ptr(uint(1))}},
+				Uint8:           &TestGenericType[uint8]{Value: 1, Ptr: Ptr(uint8(1)), SliceOfValues: []uint8{1}, PtrToSliceOfValues: &[]uint8{1}, SliceOfPtrs: []*uint8{Ptr(uint8(1))}, PtrToSliceOfPtrs: &[]*uint8{Ptr(uint8(1))}},
+				Uint16:          &TestGenericType[uint16]{Value: 1, Ptr: Ptr(uint16(1)), SliceOfValues: []uint16{1}, PtrToSliceOfValues: &[]uint16{1}, SliceOfPtrs: []*uint16{Ptr(uint16(1))}, PtrToSliceOfPtrs: &[]*uint16{Ptr(uint16(1))}},
+				Uint32:          &TestGenericType[uint32]{Value: 1, Ptr: Ptr(uint32(1)), SliceOfValues: []uint32{1}, PtrToSliceOfValues: &[]uint32{1}, SliceOfPtrs: []*uint32{Ptr(uint32(1))}, PtrToSliceOfPtrs: &[]*uint32{Ptr(uint32(1))}},
+				Uint64:          &TestGenericType[uint64]{Value: 1, Ptr: Ptr(uint64(1)), SliceOfValues: []uint64{1}, PtrToSliceOfValues: &[]uint64{1}, SliceOfPtrs: []*uint64{Ptr(uint64(1))}, PtrToSliceOfPtrs: &[]*uint64{Ptr(uint64(1))}},
+				Float32:         &TestGenericType[float32]{Value: 1, Ptr: Ptr(float32(1)), SliceOfValues: []float32{1}, PtrToSliceOfValues: &[]float32{1}, SliceOfPtrs: []*float32{Ptr(float32(1))}, PtrToSliceOfPtrs: &[]*float32{Ptr(float32(1))}},
+				Float64:         &TestGenericType[float64]{Value: 1, Ptr: Ptr(float64(1)), SliceOfValues: []float64{1}, PtrToSliceOfValues: &[]float64{1}, SliceOfPtrs: []*float64{Ptr(float64(1))}, PtrToSliceOfPtrs: &[]*float64{Ptr(float64(1))}},
+				Complex64:       &TestGenericType[complex64]{Value: 1, Ptr: Ptr(complex64(1)), SliceOfValues: []complex64{1}, PtrToSliceOfValues: &[]complex64{1}, SliceOfPtrs: []*complex64{Ptr(complex64(1))}, PtrToSliceOfPtrs: &[]*complex64{Ptr(complex64(1))}},
+				Complex128:      &TestGenericType[complex128]{Value: 1, Ptr: Ptr(complex128(1)), SliceOfValues: []complex128{1}, PtrToSliceOfValues: &[]complex128{1}, SliceOfPtrs: []*complex128{Ptr(complex128(1))}, PtrToSliceOfPtrs: &[]*complex128{Ptr(complex128(1))}},
+				String:          &TestGenericType[string]{Value: "a", Ptr: Ptr("a"), SliceOfValues: []string{"a"}, PtrToSliceOfValues: &[]string{"a"}, SliceOfPtrs: []*string{Ptr("a")}, PtrToSliceOfPtrs: &[]*string{Ptr("a")}},
+				Slice:           &TestGenericType[[]string]{Value: []string{"a"}, Ptr: &[]string{"a"}, SliceOfValues: [][]string{{"a"}}, PtrToSliceOfValues: &[][]string{{"a"}}, SliceOfPtrs: []*[]string{{"a"}}, PtrToSliceOfPtrs: &[]*[]string{{"a"}}},
+				Map:             &TestGenericType[map[string]string]{Value: map[string]string{"k": "a"}, Ptr: &map[string]string{"k": "a"}, SliceOfValues: []map[string]string{{"k": "a"}}, PtrToSliceOfValues: &[]map[string]string{{"k": "a"}}, SliceOfPtrs: []*map[string]string{{"k": "a"}}, PtrToSliceOfPtrs: &[]*map[string]string{{"k": "a"}}},
+				Struct:          &TestGenericType[TestStruct]{Value: TestStruct{Value: "a"}, Ptr: &TestStruct{Value: "a"}, SliceOfValues: []TestStruct{{Value: "a"}}, PtrToSliceOfValues: &[]TestStruct{{Value: "a"}}, SliceOfPtrs: []*TestStruct{{Value: "a"}}, PtrToSliceOfPtrs: &[]*TestStruct{{Value: "a"}}},
+			},
+			want: []*FlagData{
+				{PathNames: []string{}, Type: Type[*TestFlagBase](), String: ``},
+				{PathNames: []string{"Bool"}, Type: Type[*TestGenericType[bool]](), String: `{"Value":true,"Ptr":true,"SliceOfValues":[true],"PtrToSliceOfValues":[true],"SliceOfPtrs":[true],"PtrToSliceOfPtrs":[true]}`},
+				{PathNames: []string{"Bool", "Value"}, Type: Type[bool](), String: `true`},
+				{PathNames: []string{"Bool", "Ptr"}, Type: Type[*bool](), String: `true`},
+				{PathNames: []string{"Bool", "SliceOfValues"}, Type: Type[[]bool](), String: `[true]`},
+				{PathNames: []string{"Bool", "PtrToSliceOfValues"}, Type: Type[*[]bool](), String: `[true]`},
+				{PathNames: []string{"Bool", "SliceOfPtrs"}, Type: Type[[]*bool](), String: `[true]`},
+				{PathNames: []string{"Bool", "PtrToSliceOfPtrs"}, Type: Type[*[]*bool](), String: `[true]`},
+				{PathNames: []string{"Int"}, Type: Type[*TestGenericType[int]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Int", "Value"}, Type: Type[int](), String: `1`},
+				{PathNames: []string{"Int", "Ptr"}, Type: Type[*int](), String: `1`},
+				{PathNames: []string{"Int", "SliceOfValues"}, Type: Type[[]int](), String: `[1]`},
+				{PathNames: []string{"Int", "PtrToSliceOfValues"}, Type: Type[*[]int](), String: `[1]`},
+				{PathNames: []string{"Int", "SliceOfPtrs"}, Type: Type[[]*int](), String: `[1]`},
+				{PathNames: []string{"Int", "PtrToSliceOfPtrs"}, Type: Type[*[]*int](), String: `[1]`},
+				{PathNames: []string{"Int8"}, Type: Type[*TestGenericType[int8]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Int8", "Value"}, Type: Type[int8](), String: `1`},
+				{PathNames: []string{"Int8", "Ptr"}, Type: Type[*int8](), String: `1`},
+				{PathNames: []string{"Int8", "SliceOfValues"}, Type: Type[[]int8](), String: `[1]`},
+				{PathNames: []string{"Int8", "PtrToSliceOfValues"}, Type: Type[*[]int8](), String: `[1]`},
+				{PathNames: []string{"Int8", "SliceOfPtrs"}, Type: Type[[]*int8](), String: `[1]`},
+				{PathNames: []string{"Int8", "PtrToSliceOfPtrs"}, Type: Type[*[]*int8](), String: `[1]`},
+				{PathNames: []string{"Int16"}, Type: Type[*TestGenericType[int16]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Int16", "Value"}, Type: Type[int16](), String: `1`},
+				{PathNames: []string{"Int16", "Ptr"}, Type: Type[*int16](), String: `1`},
+				{PathNames: []string{"Int16", "SliceOfValues"}, Type: Type[[]int16](), String: `[1]`},
+				{PathNames: []string{"Int16", "PtrToSliceOfValues"}, Type: Type[*[]int16](), String: `[1]`},
+				{PathNames: []string{"Int16", "SliceOfPtrs"}, Type: Type[[]*int16](), String: `[1]`},
+				{PathNames: []string{"Int16", "PtrToSliceOfPtrs"}, Type: Type[*[]*int16](), String: `[1]`},
+				{PathNames: []string{"Int32"}, Type: Type[*TestGenericType[int32]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Int32", "Value"}, Type: Type[int32](), String: `1`},
+				{PathNames: []string{"Int32", "Ptr"}, Type: Type[*int32](), String: `1`},
+				{PathNames: []string{"Int32", "SliceOfValues"}, Type: Type[[]int32](), String: `[1]`},
+				{PathNames: []string{"Int32", "PtrToSliceOfValues"}, Type: Type[*[]int32](), String: `[1]`},
+				{PathNames: []string{"Int32", "SliceOfPtrs"}, Type: Type[[]*int32](), String: `[1]`},
+				{PathNames: []string{"Int32", "PtrToSliceOfPtrs"}, Type: Type[*[]*int32](), String: `[1]`},
+				{PathNames: []string{"Int64"}, Type: Type[*TestGenericType[int64]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Int64", "Value"}, Type: Type[int64](), String: `1`},
+				{PathNames: []string{"Int64", "Ptr"}, Type: Type[*int64](), String: `1`},
+				{PathNames: []string{"Int64", "SliceOfValues"}, Type: Type[[]int64](), String: `[1]`},
+				{PathNames: []string{"Int64", "PtrToSliceOfValues"}, Type: Type[*[]int64](), String: `[1]`},
+				{PathNames: []string{"Int64", "SliceOfPtrs"}, Type: Type[[]*int64](), String: `[1]`},
+				{PathNames: []string{"Int64", "PtrToSliceOfPtrs"}, Type: Type[*[]*int64](), String: `[1]`},
+				{PathNames: []string{"Uint"}, Type: Type[*TestGenericType[uint]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Uint", "Value"}, Type: Type[uint](), String: `1`},
+				{PathNames: []string{"Uint", "Ptr"}, Type: Type[*uint](), String: `1`},
+				{PathNames: []string{"Uint", "SliceOfValues"}, Type: Type[[]uint](), String: `[1]`},
+				{PathNames: []string{"Uint", "PtrToSliceOfValues"}, Type: Type[*[]uint](), String: `[1]`},
+				{PathNames: []string{"Uint", "SliceOfPtrs"}, Type: Type[[]*uint](), String: `[1]`},
+				{PathNames: []string{"Uint", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint](), String: `[1]`},
+				{PathNames: []string{"Uint8"}, Type: Type[*TestGenericType[uint8]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":"AQ==","PtrToSliceOfValues":"AQ==","SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Uint8", "Value"}, Type: Type[uint8](), String: `1`},
+				{PathNames: []string{"Uint8", "Ptr"}, Type: Type[*uint8](), String: `1`},
+				{PathNames: []string{"Uint8", "SliceOfValues"}, Type: Type[[]uint8](), String: `"AQ=="`},
+				{PathNames: []string{"Uint8", "PtrToSliceOfValues"}, Type: Type[*[]uint8](), String: `"AQ=="`},
+				{PathNames: []string{"Uint8", "SliceOfPtrs"}, Type: Type[[]*uint8](), String: `[1]`},
+				{PathNames: []string{"Uint8", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint8](), String: `[1]`},
+				{PathNames: []string{"Uint16"}, Type: Type[*TestGenericType[uint16]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Uint16", "Value"}, Type: Type[uint16](), String: `1`},
+				{PathNames: []string{"Uint16", "Ptr"}, Type: Type[*uint16](), String: `1`},
+				{PathNames: []string{"Uint16", "SliceOfValues"}, Type: Type[[]uint16](), String: `[1]`},
+				{PathNames: []string{"Uint16", "PtrToSliceOfValues"}, Type: Type[*[]uint16](), String: `[1]`},
+				{PathNames: []string{"Uint16", "SliceOfPtrs"}, Type: Type[[]*uint16](), String: `[1]`},
+				{PathNames: []string{"Uint16", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint16](), String: `[1]`},
+				{PathNames: []string{"Uint32"}, Type: Type[*TestGenericType[uint32]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Uint32", "Value"}, Type: Type[uint32](), String: `1`},
+				{PathNames: []string{"Uint32", "Ptr"}, Type: Type[*uint32](), String: `1`},
+				{PathNames: []string{"Uint32", "SliceOfValues"}, Type: Type[[]uint32](), String: `[1]`},
+				{PathNames: []string{"Uint32", "PtrToSliceOfValues"}, Type: Type[*[]uint32](), String: `[1]`},
+				{PathNames: []string{"Uint32", "SliceOfPtrs"}, Type: Type[[]*uint32](), String: `[1]`},
+				{PathNames: []string{"Uint32", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint32](), String: `[1]`},
+				{PathNames: []string{"Uint64"}, Type: Type[*TestGenericType[uint64]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Uint64", "Value"}, Type: Type[uint64](), String: `1`},
+				{PathNames: []string{"Uint64", "Ptr"}, Type: Type[*uint64](), String: `1`},
+				{PathNames: []string{"Uint64", "SliceOfValues"}, Type: Type[[]uint64](), String: `[1]`},
+				{PathNames: []string{"Uint64", "PtrToSliceOfValues"}, Type: Type[*[]uint64](), String: `[1]`},
+				{PathNames: []string{"Uint64", "SliceOfPtrs"}, Type: Type[[]*uint64](), String: `[1]`},
+				{PathNames: []string{"Uint64", "PtrToSliceOfPtrs"}, Type: Type[*[]*uint64](), String: `[1]`},
+				{PathNames: []string{"Float32"}, Type: Type[*TestGenericType[float32]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Float32", "Value"}, Type: Type[float32](), String: `1`},
+				{PathNames: []string{"Float32", "Ptr"}, Type: Type[*float32](), String: `1`},
+				{PathNames: []string{"Float32", "SliceOfValues"}, Type: Type[[]float32](), String: `[1]`},
+				{PathNames: []string{"Float32", "PtrToSliceOfValues"}, Type: Type[*[]float32](), String: `[1]`},
+				{PathNames: []string{"Float32", "SliceOfPtrs"}, Type: Type[[]*float32](), String: `[1]`},
+				{PathNames: []string{"Float32", "PtrToSliceOfPtrs"}, Type: Type[*[]*float32](), String: `[1]`},
+				{PathNames: []string{"Float64"}, Type: Type[*TestGenericType[float64]](), String: `{"Value":1,"Ptr":1,"SliceOfValues":[1],"PtrToSliceOfValues":[1],"SliceOfPtrs":[1],"PtrToSliceOfPtrs":[1]}`},
+				{PathNames: []string{"Float64", "Value"}, Type: Type[float64](), String: `1`},
+				{PathNames: []string{"Float64", "Ptr"}, Type: Type[*float64](), String: `1`},
+				{PathNames: []string{"Float64", "SliceOfValues"}, Type: Type[[]float64](), String: `[1]`},
+				{PathNames: []string{"Float64", "PtrToSliceOfValues"}, Type: Type[*[]float64](), String: `[1]`},
+				{PathNames: []string{"Float64", "SliceOfPtrs"}, Type: Type[[]*float64](), String: `[1]`},
+				{PathNames: []string{"Float64", "PtrToSliceOfPtrs"}, Type: Type[*[]*float64](), String: `[1]`},
+				{PathNames: []string{"Complex64"}, Type: Type[*TestGenericType[complex64]](), String: ``},
+				{PathNames: []string{"Complex64", "Value"}, Type: Type[complex64](), String: `(1+0i)`},
+				{PathNames: []string{"Complex64", "Ptr"}, Type: Type[*complex64](), String: `(1+0i)`},
+				{PathNames: []string{"Complex64", "SliceOfValues"}, Type: Type[[]complex64](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex64", "PtrToSliceOfValues"}, Type: Type[*[]complex64](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex64", "SliceOfPtrs"}, Type: Type[[]*complex64](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex64", "PtrToSliceOfPtrs"}, Type: Type[*[]*complex64](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex128"}, Type: Type[*TestGenericType[complex128]](), String: ``},
+				{PathNames: []string{"Complex128", "Value"}, Type: Type[complex128](), String: `(1+0i)`},
+				{PathNames: []string{"Complex128", "Ptr"}, Type: Type[*complex128](), String: `(1+0i)`},
+				{PathNames: []string{"Complex128", "SliceOfValues"}, Type: Type[[]complex128](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex128", "PtrToSliceOfValues"}, Type: Type[*[]complex128](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex128", "SliceOfPtrs"}, Type: Type[[]*complex128](), String: `["(1+0i)"]`},
+				{PathNames: []string{"Complex128", "PtrToSliceOfPtrs"}, Type: Type[*[]*complex128](), String: `["(1+0i)"]`},
+				{PathNames: []string{"String"}, Type: Type[*TestGenericType[string]](), String: `{"Value":"a","Ptr":"a","SliceOfValues":["a"],"PtrToSliceOfValues":["a"],"SliceOfPtrs":["a"],"PtrToSliceOfPtrs":["a"]}`},
+				{PathNames: []string{"String", "Value"}, Type: Type[string](), String: `a`},
+				{PathNames: []string{"String", "Ptr"}, Type: Type[*string](), String: `a`},
+				{PathNames: []string{"String", "SliceOfValues"}, Type: Type[[]string](), String: `["a"]`},
+				{PathNames: []string{"String", "PtrToSliceOfValues"}, Type: Type[*[]string](), String: `["a"]`},
+				{PathNames: []string{"String", "SliceOfPtrs"}, Type: Type[[]*string](), String: `["a"]`},
+				{PathNames: []string{"String", "PtrToSliceOfPtrs"}, Type: Type[*[]*string](), String: `["a"]`},
+				{PathNames: []string{"Slice"}, Type: Type[*TestGenericType[[]string]](), String: `{"Value":["a"],"Ptr":["a"],"SliceOfValues":[["a"]],"PtrToSliceOfValues":[["a"]],"SliceOfPtrs":[["a"]],"PtrToSliceOfPtrs":[["a"]]}`},
+				{PathNames: []string{"Slice", "Value"}, Type: Type[[]string](), String: `["a"]`},
+				{PathNames: []string{"Slice", "Ptr"}, Type: Type[*[]string](), String: `["a"]`},
+				{PathNames: []string{"Slice", "SliceOfValues"}, Type: Type[[][]string](), String: `[["a"]]`},
+				{PathNames: []string{"Slice", "PtrToSliceOfValues"}, Type: Type[*[][]string](), String: `[["a"]]`},
+				{PathNames: []string{"Slice", "SliceOfPtrs"}, Type: Type[[]*[]string](), String: `[["a"]]`},
+				{PathNames: []string{"Slice", "PtrToSliceOfPtrs"}, Type: Type[*[]*[]string](), String: `[["a"]]`},
+				{PathNames: []string{"Map"}, Type: Type[*TestGenericType[map[string]string]](), String: `{"Value":{"k":"a"},"Ptr":{"k":"a"},"SliceOfValues":[{"k":"a"}],"PtrToSliceOfValues":[{"k":"a"}],"SliceOfPtrs":[{"k":"a"}],"PtrToSliceOfPtrs":[{"k":"a"}]}`},
+				{PathNames: []string{"Map", "Value"}, Type: Type[map[string]string](), String: `{"k":"a"}`},
+				{PathNames: []string{"Map", "Ptr"}, Type: Type[*map[string]string](), String: `{"k":"a"}`},
+				{PathNames: []string{"Map", "SliceOfValues"}, Type: Type[[]map[string]string](), String: `[{"k":"a"}]`},
+				{PathNames: []string{"Map", "PtrToSliceOfValues"}, Type: Type[*[]map[string]string](), String: `[{"k":"a"}]`},
+				{PathNames: []string{"Map", "SliceOfPtrs"}, Type: Type[[]*map[string]string](), String: `[{"k":"a"}]`},
+				{PathNames: []string{"Map", "PtrToSliceOfPtrs"}, Type: Type[*[]*map[string]string](), String: `[{"k":"a"}]`},
+				{PathNames: []string{"Struct"}, Type: Type[*TestGenericType[TestStruct]](), String: `{"Value":{"Value":"a"},"Ptr":{"Value":"a"},"SliceOfValues":[{"Value":"a"}],"PtrToSliceOfValues":[{"Value":"a"}],"SliceOfPtrs":[{"Value":"a"}],"PtrToSliceOfPtrs":[{"Value":"a"}]}`},
+				{PathNames: []string{"Struct", "Value"}, Type: Type[TestStruct](), String: `{"Value":"a"}`},
+				{PathNames: []string{"Struct", "Value", "Value"}, Type: Type[string](), String: `a`},
+				{PathNames: []string{"Struct", "Ptr"}, Type: Type[*TestStruct](), String: `{"Value":"a"}`},
+				{PathNames: []string{"Struct", "Ptr", "Value"}, Type: Type[string](), String: `a`},
+				{PathNames: []string{"Struct", "SliceOfValues"}, Type: Type[[]TestStruct](), String: `[{"Value":"a"}]`},
+				{PathNames: []string{"Struct", "PtrToSliceOfValues"}, Type: Type[*[]TestStruct](), String: `[{"Value":"a"}]`},
+				{PathNames: []string{"Struct", "SliceOfPtrs"}, Type: Type[[]*TestStruct](), String: `[{"Value":"a"}]`},
+				{PathNames: []string{"Struct", "PtrToSliceOfPtrs"}, Type: Type[*[]*TestStruct](), String: `[{"Value":"a"}]`},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := jsonflag.Recursive(test.given)
+			require.Equal(t, test.want, DataOfFlags(got))
+			require.Equal(t, test.postGiven, test.given)
+		})
+	}
+}
