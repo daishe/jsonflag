@@ -2,6 +2,9 @@
 
 **jsonflag** is a tiny Go library that can turn any JSON-marshallable struct into a set of command‑line flags. It works with the standard flag package and with the popular [pflag package](https://github.com/spf13/pflag), handling nested structs, slices, maps and pointer fields automatically.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/daishe/jsonflag.svg)](https://pkg.go.dev/github.com/daishe/jsonflag)
+[![Go Report Card](https://goreportcard.com/badge/github.com/daishe/jsonflag)](https://goreportcard.com/report/github.com/daishe/jsonflag)
+
 ## Adding to project
 
 First, use `go get` to download and add the latest version of the library to the project.
