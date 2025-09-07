@@ -53,40 +53,6 @@ func ExampleRecursive_withGoFlag() {
 	// }
 }
 
-// func ExampleAsGoFlag_fooBarBaz() {
-// 	type Input struct {
-// 		Foo string
-// 		Bar string
-// 		Baz string
-// 	}
-
-// 	fs := flag.NewFlagSet("", flag.ExitOnError)
-// 	ops := &jsonflag.Operations{}
-// 	for _, f := range jsonflag.Recursive(&Input{}) {
-// 		fs.Var(jsonflag.AsGoFlag(ops, f))
-// 	}
-// 	if err := fs.Parse([]string{"--Foo=foo value", "--Baz=baz value"}); err != nil {
-// 		panic(err)
-// 	}
-
-// 	i := &Input{}
-// 	if err := ops.Apply(i); err != nil {
-// 		panic(err)
-// 	}
-// 	b, err := json.MarshalIndent(i, "", "  ")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(string(b))
-
-// 	// Output:
-// 	// {
-// 	//   "Foo": "foo value",
-// 	//   "Bar": "",
-// 	//   "Baz": "baz value"
-// 	// }
-// }
-
 func ExampleRecursive_withPFlag() {
 	type Input struct {
 		Foo string `json:"Foo"`
@@ -125,37 +91,3 @@ func ExampleRecursive_withPFlag() {
 	//   "Baz": "another baz value"
 	// }
 }
-
-// func ExampleAsPFlag_fooBarBaz() {
-// 	type Input struct {
-// 		Foo string
-// 		Bar string
-// 		Baz string
-// 	}
-
-// 	fs := pflag.NewFlagSet("", pflag.ExitOnError)
-// 	ops := &jsonflag.Operations{}
-// 	for _, f := range jsonflag.Recursive(&Input{}) {
-// 		fs.AddFlag(jsonflag.AsPFlag(ops, f))
-// 	}
-// 	if err := fs.Parse([]string{"--Foo=foo value", "--Baz=baz value", "--Baz=another baz value"}); err != nil {
-// 		panic(err)
-// 	}
-
-// 	i := &Input{}
-// 	if err := ops.Apply(i); err != nil {
-// 		panic(err)
-// 	}
-// 	b, err := json.MarshalIndent(i, "", "  ")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	fmt.Println(string(b))
-
-// 	// Output:
-// 	// {
-// 	//   "Foo": "foo value",
-// 	//   "Bar": "",
-// 	//   "Baz": "another baz value"
-// 	// }
-// }

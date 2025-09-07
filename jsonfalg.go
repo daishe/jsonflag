@@ -21,19 +21,6 @@ import (
 	"unicode"
 )
 
-// // Operations is a list of operations based on the provided flags that when applied to a given value will set it accordingly to flags.
-// type Operations []func(any) error
-
-// // Apply applies the list of operations to a given value.
-// func (ops Operations) Apply(base any) error {
-// 	for _, o := range ops {
-// 		if err := o(base); err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
-
 // Name creates a new flag name by joining all names of struct fields along the provided path.
 func Name(path []reflect.StructField) string {
 	b := strings.Builder{}
